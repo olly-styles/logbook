@@ -1,0 +1,29 @@
+exclude: ^(\.venv|__pycache__)/
+repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+          - id: check-json
+          - id: check-yaml
+          - id: detect-private-key
+          - id: check-merge-conflict
+          - id: end-of-file-fixer
+          - id: check-ast
+          - id: name-tests-test
+            args: [--pytest-test-first]
+
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.15.7
+      hooks:
+          - id: ruff-check
+            args: ["--fix"]
+          - id: ruff-format
+
+    - repo: local
+      hooks:
+          - id: pyright
+            name: pyright
+            entry: uv run pyright
+            language: system
+            pass_filenames: false
+            files: \.py$

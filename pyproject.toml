@@ -1,0 +1,97 @@
+[project]
+name = "logbook"
+version = "0.1.0"
+description = "Searchable index of Claude Code session history, exposed as an MCP server"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Olly Styles", email = "ollystyles@gmail.com" }]
+requires-python = ">=3.12"
+dependencies = ["mcp>=2"]
+
+[project.urls]
+Repository = "https://github.com/olly-styles/logbook"
+Issues = "https://github.com/olly-styles/logbook/issues"
+
+[project.scripts]
+logbook = "logbook.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/logbook"]
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0",
+    "pyright==1.1.408",
+    "pytest>=8.3",
+    "ruff==0.15.7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+fix = true
+exclude = [".venv", "__pycache__"]
+
+[tool.ruff.lint]
+extend-select = ["ALL"]
+ignore = [
+    "D100",    # Missing docstring in public module
+    "D101",    # Missing docstring in public class
+    "D102",    # Missing docstring in public method
+    "D103",    # Missing docstring in public function
+    "D104",    # Missing docstring in __init__
+    "D105",    # Missing docstring in magic method
+    "D106",    # Missing docstring in nested class
+    "D107",    # Missing docstring in __init__
+    "D400",    # First line should end with a period
+    "D415",    # First line should end with a period, question mark, or exclamation point
+    "TRY003",  # Long exception messages outside the exception class
+    "TRY301",  # Abstract `raise` to an inner function
+    "EM101",   # Exception must not use a string literal
+    "EM102",   # Exception must not use an f-string literal
+    "G004",    # Logging statement uses f-string
+    "EXE002",  # Shebang missing in executable
+    "PLR0913", # Too many positional arguments
+    "PLW0603", # Global statement (singleton pattern)
+    "PLC0415", # Import should be at top-level (lazy imports)
+    "D203",    # Blank line before class docstring (incompatible with D211)
+    "D213",    # Multi-line summary second line (incompatible with D212)
+    "COM812",  # Missing trailing comma (conflicts with ruff formatter)
+    "S608",    # SQL built from f-strings: only trusted WHERE fragments are interpolated, values are bound
+    "T201",    # print is the CLI's output channel
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/logbook/install.py" = [
+    "S603",   # subprocess runs the claude CLI with a fixed argv
+]
+"docs/make_screenshot.py" = ["INP001", "S603"]
+"tests/*.py" = [
+    "S101",   # Allow assert statements in tests
+    "S106",   # Allow hardcoded strings in tests
+    "SLF001", # Allow calling private methods in tests
+    "INP001", # Test directory is not an importable package
+    "PLR2004",# Tests assert against literal expected values
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.pyright]
+include = ["src", "tests"]
+exclude = ["**/__pycache__", ".venv"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"

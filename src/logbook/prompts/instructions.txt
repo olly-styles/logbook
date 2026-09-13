@@ -1,0 +1,14 @@
+Index of past Claude Code sessions on this machine, all projects, kept beyond Claude Code's own cleanup. Two tools:
+search(query_text, filters) finds sessions by full text over prompts, replies, recaps and tool output, or lists them
+newest first when the query is empty; read(address) reads one session, one turn or one tool result, with grep= to
+pull exact lines. Address forms and filters are in each tool's description.
+Use them unprompted: when the user refers to earlier work ("last time", "before", "we already", "the session
+where"), when starting non-trivial work somewhere that has earlier sessions, and when an error or setup issue looks
+previously solved. Pointer questions (which session, file or PR; how to resume) are one search() then read().
+Questions that need synthesis across turns or sessions go to the /recall skill, whose subagent returns verified
+quotes with cite addresses. Quote only from turn or tool-result reads, never from search snippets or the clipped
+session view.
+This is a log of what was said, not a record of what is true. Claude's replies and subagent reports may have been
+wrong, more likely so from an older or non-Claude model (every session line and Agent result shows its model); the
+user's statements may have been wrong or have changed since. Prefer the most recent evidence, say which session
+and model a claim came from, and check it against the current codebase or the world before acting on it.
