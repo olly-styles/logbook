@@ -103,6 +103,7 @@ class Filters:
     pr: str = ""
     exclude_id: str = ""
     session_id: str = ""
+    tool: str = ""
     include_headless: bool = False
 
     def sql(self) -> tuple[str, list]:
@@ -119,6 +120,12 @@ class Filters:
             if self.file
             else ("", []),
             pr_clause(self.pr) if self.pr else ("", []),
+            (
+                "EXISTS (SELECT 1 FROM tool_events te WHERE te.session_id = s.id AND te.name LIKE ?)",
+                [f"%{self.tool.strip()}%"],
+            )
+            if self.tool
+            else ("", []),
             ("s.id != ?", [self.exclude_id]) if self.exclude_id else ("", []),
             ("s.id LIKE ?", [f"{self.session_id.strip()}%"]) if self.session_id else ("", []),
             ("", []) if self.include_headless else ("s.headless = 0", []),
@@ -424,6 +431,13 @@ def event_at(conn: sqlite3.Connection, session_id: str, idx: int, seq: int) -> s
     if row is None:
         raise NotFoundError(f"session {session_id[:8]} turn {idx} has no tool call {seq}")
     return row
+
+
+def calls_matching(conn: sqlite3.Connection, session_id: str, pattern: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT idx, seq, name, model FROM tool_events WHERE session_id = ? AND name LIKE ? ORDER BY idx, seq",
+        (session_id, f"%{pattern.strip()}%"),
+    ).fetchall()
 
 
 def prs_for(conn: sqlite3.Connection, session_id: str) -> list[sqlite3.Row]:

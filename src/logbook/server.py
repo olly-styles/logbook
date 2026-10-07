@@ -36,8 +36,8 @@ def at_least_one(name: str, value: int) -> int:
     return value
 
 
-def listing_window(since: str, pr: str, file: str) -> str:
-    if since or pr or file:
+def listing_window(since: str, pr: str, file: str, tool: str) -> str:
+    if since or pr or file or tool:
         return since
     return DEFAULT_LISTING_WINDOW
 
@@ -47,7 +47,7 @@ def run_listing(c: sqlite3.Connection, f: query.Filters, limit: int) -> tuple[st
         rows = query.sessions_touching(c, f.file, f, limit)
         return render.render_files(rows, f.file, c), len(rows)
     rows = query.recent(c, f, limit)
-    return render.render_recent(rows, c), len(rows)
+    return render.render_recent(rows, c, f.tool), len(rows)
 
 
 def run_search(
@@ -70,6 +70,7 @@ def search(
     until: str = "",
     file: str = "",
     pr: str = "",
+    tool: str = "",
     session_id: str = "",
     limit: int = SEARCH_DEFAULT_LIMIT,
     *,
@@ -91,11 +92,14 @@ def search(
     include_headless=True.
 
     Empty query_text lists sessions newest first, 8 rows unless limit=, over the last 14 days unless
-    since=, pr= or file= is given: search(project="myrepo"), search(pr="119"), search(file="auth.py").
+    since=, pr=, file= or tool= is given: search(project="myrepo"), search(pr="119"), search(file="auth.py"),
+    search(tool="WebFetch").
 
     Filters: project = substring of the cwd; since/until = YYYY-MM-DD, 7d/2w/3m or an ISO 8601 timestamp; file =
-    substring of a path read or written; pr = PR number or substring of the PR url or repo; session_id = id or
-    8-char prefix to search one session (up to 12 snippets). limit must be at least 1.
+    substring of a path read or written; pr = PR number or substring of the PR url or repo; tool = substring of a
+    tool name the session called (tool="playwright" matches mcp__playwright__browser_click), each hit then lists the
+    calls as t<idx>#<seq>; session_id = id or 8-char prefix to search one session (up to 12 snippets). limit must be
+    at least 1.
 
     Next: read("<session8>") for the index of turns, then read("<session8>", grep=...), read("<session8>/t<idx>"),
     read("<session8>/t<idx>#<seq>"), each step costing more. Never quote search output; snippets are FTS excerpts.
@@ -106,6 +110,7 @@ def search(
         until=until,
         file=file,
         pr=pr,
+        tool=tool,
         session_id=session_id,
         include_tools=include_tools,
         include_headless=include_headless,
@@ -117,10 +122,11 @@ def search(
             if not query_text.strip():
                 f = filters(
                     project=project,
-                    since=listing_window(since, pr, file),
+                    since=listing_window(since, pr, file, tool),
                     until=until,
                     file=file,
                     pr=pr,
+                    tool=tool,
                     include_headless=include_headless,
                 )
                 return run_listing(c, f, at_least_one("limit", limit))
@@ -130,6 +136,7 @@ def search(
                 until=until,
                 file=file,
                 pr=pr,
+                tool=tool,
                 session_id=session_id,
                 include_headless=include_headless,
             )

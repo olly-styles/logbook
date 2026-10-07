@@ -64,6 +64,20 @@ def test_search_text_and_listings() -> None:
     assert "No indexed sessions" in empty_default_window
 
 
+@pytest.mark.usefixtures("indexed")
+def test_tool_filter() -> None:
+    by_tool = server.search(tool="bash")
+    assert "aaaaaaaa" in by_tool
+    assert "bbbbbbbb" not in by_tool
+    assert "    calls: t1#0 Bash" in by_tool
+    assert "bbbbbbbb" in server.search(tool="Agent")
+    assert "No indexed sessions" in server.search(tool="WebFetch")
+    with_text = server.search("pyright", tool="Edit")
+    assert "aaaaaaaa" in with_text
+    assert "    calls: t0#1 Edit" in with_text
+    assert "aaaaaaaa" not in server.search("pyright", tool="Write")
+
+
 def test_read_levels(indexed: sqlite3.Connection) -> None:
     session_view = server.read(SID_A[:8])
     assert "resume: claude --resume " + SID_A in session_view
