@@ -64,7 +64,7 @@ step costing more.
 
 **Ranking is BM25 plus a boost for the current directory.** There is no recency decay. Every hit carries its date
 and the tool description tells the agent to prefer the most recent of equally relevant hits. Words are ANDed within
-one turn, recap or tool result; when nothing matches, the search falls back to sessions matching two or more of the
+one turn, recap or tool result and quoted phrases must appear as written (stems still match); when nothing matches, the search falls back to sessions matching two or more of the
 words, one line each.
 
 **Secrets are redacted before storage.** Known key formats, JWTs, private key blocks, authorization headers, URL

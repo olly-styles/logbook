@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from .address import ANCHOR_LEN, TURN_IDX
 
-TOKEN = re.compile(r"\S+")
+TOKEN = re.compile(r'"[^"]*"\*?|\S+')
 DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RELATIVE = re.compile(r"^(\d+)([dwm])$")
 ISO_TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$")
@@ -32,9 +32,19 @@ class AmbiguousError(ValueError):
     pass
 
 
+def is_phrase(tok: str) -> bool:
+    bare = tok.rstrip("*")
+    return len(bare) > 1 and bare.startswith('"') and bare.endswith('"')
+
+
+def token_core(tok: str) -> str:
+    bare = tok.rstrip("*")
+    return " ".join(bare[1:-1].split()) if is_phrase(tok) else bare
+
+
 def fts_parts(text: str) -> list[str]:
     tokens = TOKEN.findall(text)
-    cores = [tok.rstrip("*") for tok in tokens]
+    cores = [token_core(tok) for tok in tokens]
     parts: list[str] = []
     for i, (tok, core) in enumerate(zip(tokens, cores, strict=True)):
         if not core:
@@ -282,9 +292,18 @@ def or_terms(text: str) -> list[str]:
     tokens = TOKEN.findall(text)
     if len(tokens) < OR_FALLBACK_MIN_TOKENS or any(part in FTS_OPERATORS for part in fts_parts(text)):
         return []
-    cores = [tok.strip('"') for tok in tokens]
-    cores = [core for core in cores if core.rstrip("*")]
-    return cores if len(cores) >= OR_FALLBACK_MIN_TOKENS else []
+    unique: dict[str, str] = {}
+    for term in map(or_term, tokens):
+        if key := fts_query(term):
+            unique.setdefault(key, term)
+    terms = list(unique.values())
+    return terms if len(terms) >= OR_FALLBACK_MIN_TOKENS else []
+
+
+def or_term(tok: str) -> str:
+    if not is_phrase(tok):
+        return tok.strip('"')
+    return f'"{token_core(tok)}"' + ("*" if tok.endswith("*") else "")
 
 
 def fallback_search(
