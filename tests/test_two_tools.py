@@ -64,12 +64,19 @@ def test_search_text_and_listings() -> None:
     assert "No indexed sessions" in empty_default_window
 
 
-@pytest.mark.usefixtures("indexed")
-def test_tool_filter() -> None:
+def test_tool_filter(indexed: sqlite3.Connection) -> None:
     by_tool = server.search(tool="bash")
     assert "aaaaaaaa" in by_tool
     assert "bbbbbbbb" not in by_tool
-    assert "    calls: t1#0 Bash" in by_tool
+    assert "    calls: t1#0 Bash\n" in by_tool + "\n"
+    indexed.executemany(
+        "INSERT INTO tool_events (session_id, idx, seq, name) VALUES (?, 1, ?, 'Grep')",
+        [(SID_A, seq) for seq in range(10, 18)],
+    )
+    indexed.commit()
+    assert "    calls: t1#10 Grep, t1#11 Grep, t1#12 Grep, t1#13 Grep, t1#14 Grep, t1#15 Grep +2" in server.search(
+        tool="grep"
+    )
     assert "bbbbbbbb" in server.search(tool="Agent")
     assert "No indexed sessions" in server.search(tool="WebFetch")
     with_text = server.search("pyright", tool="Edit")

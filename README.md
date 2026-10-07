@@ -58,9 +58,10 @@ server never syncs. SessionStart runs a full scan as the catch-up for anything t
 **Context is the budget.** The hook injects one line per session, once per session id. Tool output is searched by
 default but only shown on request, and a session that matches only in tool output ranks below every session that
 matches in a prompt, reply or recap and takes one line. A search hit is the session line, its latest recap and up to
-two snippets; PR urls and file paths appear only when the call filters by `pr=` or `file=`. The intended path is
-`search` to `read(session)` (an index of turns) to `read(session, grep=)` to `read(turn)` to `read(turn#seq)`, each
-step costing more.
+two snippets; PR urls and file paths appear only when the call filters by `pr=` or `file=`, and `tool=` adds a
+`calls:` line naming the matching tool calls (distinct from `tool:` refs, which mark tool output that matched the
+words). The intended path is `search` to `read(session)` (an index of turns) to `read(session, grep=)` to
+`read(turn)` to `read(turn#seq)`, each step costing more.
 
 **Ranking is BM25 plus a boost for the current directory.** There is no recency decay. Every hit carries its date
 and the tool description tells the agent to prefer the most recent of equally relevant hits. Words are ANDed within

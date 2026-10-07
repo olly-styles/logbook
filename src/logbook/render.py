@@ -239,9 +239,7 @@ def render_hits(hits: list[Hit], query_text: str, conn: sqlite3.Connection, f: F
     return "\n".join(lines)
 
 
-def render_fallback(
-    hits: list[Hit], query_text: str, terms: list[str], conn: sqlite3.Connection, tool: str = ""
-) -> str:
+def render_fallback(hits: list[Hit], query_text: str, terms: list[str], conn: sqlite3.Connection, f: Filters) -> str:
     if not hits:
         return f"No sessions match {query_text!r} or two or more of its words. {RETRY_HINT}"
     lines = [
@@ -251,12 +249,12 @@ def render_fallback(
     for h in hits:
         matched = ", ".join(sorted(h.matched_terms, key=terms.index))
         lines.append(f"{session_line(h.session, query.prs_for(conn, h.session['id']))}  matched: {matched}")
-        if tool:
-            lines.append(matched_calls(conn, h.session["id"], tool))
+        if f.tool:
+            lines.append(matched_calls(conn, h.session["id"], f.tool))
     return "\n".join(lines)
 
 
-def render_recent(rows: list[sqlite3.Row], conn: sqlite3.Connection, tool: str = "") -> str:
+def render_recent(rows: list[sqlite3.Row], conn: sqlite3.Connection, f: Filters) -> str:
     if not rows:
         return "No indexed sessions match; widen since= or drop a filter."
     lines = [f"{len(rows)} most recent sessions matching the filters:"]
@@ -265,8 +263,8 @@ def render_recent(rows: list[sqlite3.Row], conn: sqlite3.Connection, tool: str =
         outcome = outcome_line(s, LISTING_RECAP_CLIP)
         if outcome:
             lines.append(outcome)
-        if tool:
-            lines.append(matched_calls(conn, s["id"], tool))
+        if f.tool:
+            lines.append(matched_calls(conn, s["id"], f.tool))
     return "\n".join(lines)
 
 
@@ -531,15 +529,15 @@ def view_event(s: sqlite3.Row, t: sqlite3.Row, e: sqlite3.Row, grep: str, max_ch
     return render_event(s, t, e, max_chars)
 
 
-def render_files(rows: list[sqlite3.Row], pattern: str, conn: sqlite3.Connection, tool: str = "") -> str:
+def render_files(rows: list[sqlite3.Row], conn: sqlite3.Connection, f: Filters) -> str:
     if not rows:
-        return f"No indexed session touched a file matching {pattern!r}."
-    lines = [f"{len(rows)} sessions touched files matching {pattern!r} (newest first):"]
+        return f"No indexed session touched a file matching {f.file!r}."
+    lines = [f"{len(rows)} sessions touched files matching {f.file!r} (newest first):"]
     for s in rows:
         lines.append(session_line(s, query.prs_for(conn, s["id"])))
         lines.append("    " + matched_files(s["matched"].split("\n")))
-        if tool:
-            lines.append(matched_calls(conn, s["id"], tool))
+        if f.tool:
+            lines.append(matched_calls(conn, s["id"], f.tool))
     return "\n".join(lines)
 
 
