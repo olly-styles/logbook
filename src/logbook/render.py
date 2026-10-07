@@ -322,6 +322,24 @@ def render_session(header: list[str], turns: list[sqlite3.Row], max_chars: int) 
     return "\n".join(header) + "\n\n" + "\n\n".join(kept)
 
 
+def grep_entry(row: tuple[int, str, str, str, str]) -> str:
+    idx, uuid, ts, role, line = row
+    where = f"recap {day(ts)} {hhmm(ts)}" if idx < 0 else f"t{idx} {uuid[:ANCHOR_LEN]} {day(ts)} {role}"
+    width = EVENT_INPUT_CLIP if role.endswith(" input") else GREP_LINE_CLIP
+    return f"{where}: {clip(line, width)}"
+
+
+def grep_cut_marker(cut: list[tuple[int, str, str, str, str]]) -> str:
+    idxs = sorted({r[0] for r in cut if r[0] >= 0})
+    if not idxs:
+        span = "recaps"
+    elif idxs[0] == idxs[-1]:
+        span = f"t{idxs[0]}"
+    else:
+        span = f"t{idxs[0]}-t{idxs[-1]}"
+    return f"… {len(cut)} more in {span}; narrow the pattern or pass turns="
+
+
 def render_session_grep(
     s: sqlite3.Row, rows: list[tuple[int, str, str, str, str]], pattern: str, max_chars: int
 ) -> str:
@@ -329,20 +347,20 @@ def render_session_grep(
         return f"session {s['id'][:8]}: no lines match /{pattern}/"
     rows = [r for r in rows if r[0] >= 0] or rows
     head = f"session {s['id'][:8]}: {len(rows)} line(s) match /{pattern}/ (t<idx> <uuid8> <date> <role>: line)"
-    out = [head]
-    used = len(head)
-    for n, (idx, uuid, ts, role, line) in enumerate(rows):
-        where = f"recap {day(ts)} {hhmm(ts)}" if idx < 0 else f"t{idx} {uuid[:ANCHOR_LEN]} {day(ts)} {role}"
-        width = EVENT_INPUT_CLIP if role.endswith(" input") else GREP_LINE_CLIP
-        entry = f"{where}: {clip(line, width)}"
-        marker = f"… {len(rows) - n} more; narrow the pattern or pass turns="
-        reserve = 0 if n == len(rows) - 1 else len(marker) + 1
-        if n == GREP_MAX_LINES or used + len(entry) + reserve + 1 > max_chars:
-            out.append(marker)
+    entries = [grep_entry(r) for r in rows]
+    if len(entries) <= GREP_MAX_LINES and lines_len([head, *entries]) - 1 <= max_chars:
+        return "\n".join([head, *entries])
+    reserve = len(grep_cut_marker(rows)) + 1
+    priority = sorted(range(len(rows)), key=lambda i: (rows[i][3].startswith("tool:"), -i))
+    kept: set[int] = set()
+    used = len(head) + reserve
+    for i in priority:
+        if len(kept) == GREP_MAX_LINES or used + len(entries[i]) + 1 > max_chars:
             break
-        out.append(entry)
-        used += len(entry) + 1
-    return "\n".join(out)
+        kept.add(i)
+        used += len(entries[i]) + 1
+    cut = [r for i, r in enumerate(rows) if i not in kept]
+    return "\n".join([head, *(entries[i] for i in sorted(kept)), grep_cut_marker(cut)])
 
 
 def index_line(t: sqlite3.Row) -> str:
