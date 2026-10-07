@@ -1,6 +1,7 @@
 import json
 import re
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -28,6 +29,7 @@ RECAP_CLIP = 300
 RECAP_EDGE = 2
 GREP_LINE_CLIP = 200
 GREP_MAX_LINES = 60
+TURN_RANGE_SEP = "\n\n----\n\n"
 INDEX_TEXT_CLIP = 90
 RECAP_GAP = '… {n} recaps not shown; read(id, grep="...") searches all'
 TURN_GAP = "… {n} turns not shown …"
@@ -467,7 +469,9 @@ def render_grep(label: str, text: str, pattern: str, max_chars: int) -> str:
     return "\n".join(out)
 
 
-def render_turn_grep(s: sqlite3.Row, t: sqlite3.Row, events: list[sqlite3.Row], pattern: str, max_chars: int) -> str:
+def turn_grep_sections(
+    s: sqlite3.Row, t: sqlite3.Row, events: list[sqlite3.Row], pattern: str, max_chars: int
+) -> tuple[str, list[str]]:
     head = turn_header(s, t, events)
     share = max(400, (max_chars - len(head)) // (2 + 2 * len(events)))
     sections = [
@@ -480,7 +484,11 @@ def render_turn_grep(s: sqlite3.Row, t: sqlite3.Row, events: list[sqlite3.Row], 
         if not section:
             section = render_grep(f"{label} input", clip_lines(e["input_summary"], EVENT_INPUT_CLIP), pattern, share)
         sections.append(section)
-    matched = [part for part in sections if part]
+    return head, [part for part in sections if part]
+
+
+def render_turn_grep(s: sqlite3.Row, t: sqlite3.Row, events: list[sqlite3.Row], pattern: str, max_chars: int) -> str:
+    head, matched = turn_grep_sections(s, t, events, pattern, max_chars)
     if not matched:
         return head + f"\n\nno lines match /{pattern}/ in this turn" + ("" if events else " (tool output not searched)")
     return "\n\n".join([head, *matched])
@@ -490,6 +498,48 @@ def view_turn(s: sqlite3.Row, t: sqlite3.Row, events: list[sqlite3.Row], grep: s
     if grep:
         return render_turn_grep(s, t, events, grep, max_chars)
     return render_turn(s, t, events, max_chars)
+
+
+def range_ref(first: int, last: int) -> str:
+    return f"t{first}" if first == last else f"t{first}-{last}"
+
+
+def turns_left_note(s: sqlite3.Row, ref: str, grep: str) -> str:
+    args = f", grep={json.dumps(grep)}" if grep else ""
+    return f'{ref} not shown to fit max_chars; read("{s["id"][:8]}/{ref}"{args})'
+
+
+def view_turn_range(
+    s: sqlite3.Row,
+    turns: list[sqlite3.Row],
+    events_of: Callable[[sqlite3.Row], list[sqlite3.Row]],
+    grep: str,
+    max_chars: int,
+) -> tuple[str, int]:
+    last = turns[-1]["idx"]
+    longest_note = turns_left_note(s, f"t{last}-{last}", grep)
+    blocks: list[str] = []
+    used = 0
+    for i, t in enumerate(turns):
+        events = events_of(t)
+        head, matched = turn_grep_sections(s, t, events, grep, max_chars) if grep else ("", [])
+        if grep and not matched:
+            continue
+        reserve = len(TURN_RANGE_SEP) + len(longest_note) if i < len(turns) - 1 else 0
+        budget = max_chars - used - (len(TURN_RANGE_SEP) if blocks else 0) - reserve
+        if not blocks:
+            block = view_turn(s, t, events, grep, max(1, budget))
+        elif grep:
+            block = "\n\n".join([head, *matched])
+        else:
+            block = view_turn(s, t, events, grep, max_chars)
+        if blocks and len(block) > budget:
+            return TURN_RANGE_SEP.join([*blocks, turns_left_note(s, range_ref(t["idx"], last), grep)]), len(blocks)
+        blocks.append(block)
+        used += len(block) + (len(TURN_RANGE_SEP) if len(blocks) > 1 else 0)
+    if not blocks:
+        return f"session {s['id'][:8]}: no lines match /{grep}/ in {range_ref(turns[0]['idx'], last)}", 0
+    return TURN_RANGE_SEP.join(blocks), len(blocks)
 
 
 def event_block(e: sqlite3.Row) -> str:

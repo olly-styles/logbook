@@ -26,7 +26,7 @@ One or two tool calls answer these. Do not spawn an agent.
 - How do I resume it: the resume command is in the header of `read("<session8>")`
 
 Answer from the search block (title, outcome, recap, snippets). Read a single turn only if the block is
-not enough.
+not enough; `read("<session8>/t65-71")` reads consecutive turns in one call.
 
 ## Subagent: synthesis questions
 

@@ -25,6 +25,18 @@ def test_parse_address_forms() -> None:
     a = parse_address("27c3625f-b1ec-449d-8e91-09e7b7390575/t4")
     assert a.session == "27c3625f-b1ec-449d-8e91-09e7b7390575"
     assert a.turn == "t4"
+    a = parse_address("27c3625f/t65-71")
+    assert (a.turn, a.turn_end, a.seq) == ("t65", 71, -1)
+    assert parse_address("27c3625f/T65-t71").turn_end == 71
+    assert parse_address("27c3625f/t16").turn_end == -1
+    with pytest.raises(ValueError, match="runs backwards"):
+        parse_address("27c3625f/t9-3")
+    with pytest.raises(ValueError, match="needs a single turn"):
+        parse_address("27c3625f/t1-3#2")
+    with pytest.raises(ValueError, match="needs turn indexes"):
+        parse_address("27c3625f/70d158d1-3")
+    with pytest.raises(ValueError, match="write 27c3625f/t16-20"):
+        parse_address("27c3625f/16-20")
     for bad in (
         "t16 claude",
         "[27c3625f 70d158d1 t16 2026-08-21 claude]",
@@ -113,6 +125,78 @@ def test_read_levels(indexed: sqlite3.Connection) -> None:
     session_grep = server.read(SID_A[:8], grep="pyright")
     assert "t0 " in session_grep
     assert "user:" in session_grep
+
+
+@pytest.mark.usefixtures("indexed")
+def test_read_turn_range() -> None:
+    both = server.read(f"{SID_A[:8]}/t0-1")
+    assert both == server.read(f"{SID_A[:8]}/t0") + "\n\n----\n\n" + server.read(f"{SID_A[:8]}/t1")
+    assert server.read(f"{SID_A[:8]}/t0-t1") == both
+    assert server.read(f"{SID_A[:8]}/t1-9") == server.read(f"{SID_A[:8]}/t1")
+    with_tools = server.read(f"{SID_A[:8]}/t0-1", include_tools=True)
+    assert "tool calls:" in with_tools
+    assert with_tools.count("cite: [aaaaaaaa ") >= 2
+    grepped = server.read(f"{SID_A[:8]}/t0-1", grep="12 tests")
+    assert "turn 1 " in grepped
+    assert "turn 0 " not in grepped
+    assert "no lines match /zebra-nope/" in server.read(f"{SID_A[:8]}/t0-1", grep="zebra-nope")
+    first_only = len(server.read(f"{SID_A[:8]}/t0")) + 80
+    cut = server.read(f"{SID_A[:8]}/t0-1", max_chars=first_only)
+    assert "turn 0 " in cut
+    assert cut.endswith('t1 not shown to fit max_chars; read("aaaaaaaa/t1")')
+    assert len(cut) <= first_only
+    tiny = server.read(f"{SID_A[:8]}/t0-1", max_chars=200)
+    assert tiny.startswith("session aaaaaaaa turn 0 ")
+    assert tiny.endswith('read("aaaaaaaa/t1")')
+    grep_cut = server.read(f"{SID_A[:8]}/t0-1", grep="t", max_chars=first_only - 40)
+    assert grep_cut.endswith('t1 not shown to fit max_chars; read("aaaaaaaa/t1", grep="t")')
+    with pytest.raises(ValueError, match="does not apply to the turn range"):
+        server.read(f"{SID_A[:8]}/t0-1", turns="last:1")
+    with pytest.raises(query.NotFoundError, match="no turns in t5-9"):
+        server.read(f"{SID_A[:8]}/t5-9")
+    with pytest.raises(ValueError, match="needs a single turn"):
+        server.read(f"{SID_A[:8]}/t0-1", seq=0)
+
+
+def test_read_turn_range_cut_at_middle_turn(
+    indexed: sqlite3.Connection, claude_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sid = "dddddddd-0000-0000-0000-000000000004"
+    lines = []
+    for i in range(5):
+        reply = "long answer " * 300 if i == 2 else f"short answer {i}"
+        lines.append(user(f"question {i}", f"2026-08-02T10:0{i}:00.000Z", sid))
+        lines.append(assistant([text(reply)], f"2026-08-02T10:0{i}:05.000Z", sid, msg_id=f"d{i}"))
+    write_transcript(claude_home / "projects" / "-home-u-proj" / f"{sid}.jsonl", lines)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
+    sync(indexed)
+    out = server.read("dddddddd/t0-4", max_chars=2000)
+    assert "short answer 1" in out
+    assert "long answer" not in out
+    assert out.endswith('t2-4 not shown to fit max_chars; read("dddddddd/t2-4")')
+    assert len(out) <= 2000
+
+
+def test_read_turn_range_grep_note_fits_max_chars(
+    indexed: sqlite3.Connection, claude_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sid = "eeeeeeee-0000-0000-0000-000000000005"
+    lines = []
+    for i in range(12):
+        reply = f"needle {i} " + "hay " * (200 if i == 10 else 1) if i in (7, 8, 10, 11) else f"plain {i}"
+        lines.append(user(f"question {i}", f"2026-08-03T10:{i:02d}:00.000Z", sid))
+        lines.append(assistant([text(reply)], f"2026-08-03T10:{i:02d}:05.000Z", sid, msg_id=f"e{i}"))
+    write_transcript(claude_home / "projects" / "-home-u-proj" / f"{sid}.jsonl", lines)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
+    sync(indexed)
+    longest_note = '\n\n----\n\nt11-11 not shown to fit max_chars; read("eeeeeeee/t11-11", grep="needle")'
+    first = len(server.read("eeeeeeee/t7", grep="needle")) + len(longest_note)
+    notes = 0
+    for max_chars in range(first, first + 1200):
+        out = server.read("eeeeeeee/t7-11", grep="needle", max_chars=max_chars)
+        assert len(out) <= max_chars
+        notes += out.endswith('t10-11 not shown to fit max_chars; read("eeeeeeee/t10-11", grep="needle")')
+    assert notes
 
 
 @pytest.mark.usefixtures("indexed")
