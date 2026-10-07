@@ -465,13 +465,11 @@ def view_turn(s: sqlite3.Row, t: sqlite3.Row, events: list[sqlite3.Row], grep: s
     return render_turn(s, t, events, max_chars)
 
 
-def range_ref(turns: list[sqlite3.Row]) -> str:
-    first, last = turns[0]["idx"], turns[-1]["idx"]
+def range_ref(first: int, last: int) -> str:
     return f"t{first}" if first == last else f"t{first}-{last}"
 
 
-def turns_left_note(s: sqlite3.Row, turns: list[sqlite3.Row], grep: str) -> str:
-    ref = range_ref(turns)
+def turns_left_note(s: sqlite3.Row, ref: str, grep: str) -> str:
     args = f", grep={json.dumps(grep)}" if grep else ""
     return f'{ref} not shown to fit max_chars; read("{s["id"][:8]}/{ref}"{args})'
 
@@ -482,7 +480,9 @@ def view_turn_range(
     events_of: Callable[[sqlite3.Row], list[sqlite3.Row]],
     grep: str,
     max_chars: int,
-) -> str:
+) -> tuple[str, int]:
+    last = turns[-1]["idx"]
+    longest_note = turns_left_note(s, f"t{last}-{last}", grep)
     blocks: list[str] = []
     used = 0
     for i, t in enumerate(turns):
@@ -490,8 +490,7 @@ def view_turn_range(
         head, matched = turn_grep_sections(s, t, events, grep, max_chars) if grep else ("", [])
         if grep and not matched:
             continue
-        rest = turns[i + 1 :]
-        reserve = len(TURN_RANGE_SEP) + len(turns_left_note(s, rest, grep)) if rest else 0
+        reserve = len(TURN_RANGE_SEP) + len(longest_note) if i < len(turns) - 1 else 0
         budget = max_chars - used - (len(TURN_RANGE_SEP) if blocks else 0) - reserve
         if not blocks:
             block = view_turn(s, t, events, grep, max(1, budget))
@@ -500,13 +499,12 @@ def view_turn_range(
         else:
             block = view_turn(s, t, events, grep, max_chars)
         if blocks and len(block) > budget:
-            blocks.append(turns_left_note(s, turns[i:], grep))
-            break
+            return TURN_RANGE_SEP.join([*blocks, turns_left_note(s, range_ref(t["idx"], last), grep)]), len(blocks)
         blocks.append(block)
         used += len(block) + (len(TURN_RANGE_SEP) if len(blocks) > 1 else 0)
     if not blocks:
-        return f"session {s['id'][:8]}: no lines match /{grep}/ in {range_ref(turns)}"
-    return TURN_RANGE_SEP.join(blocks)
+        return f"session {s['id'][:8]}: no lines match /{grep}/ in {range_ref(turns[0]['idx'], last)}", 0
+    return TURN_RANGE_SEP.join(blocks), len(blocks)
 
 
 def event_block(e: sqlite3.Row) -> str:

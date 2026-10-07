@@ -151,6 +151,28 @@ def test_read_turn_range_cut_at_middle_turn(
     assert len(out) <= 2000
 
 
+def test_read_turn_range_grep_note_fits_max_chars(
+    indexed: sqlite3.Connection, claude_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sid = "eeeeeeee-0000-0000-0000-000000000005"
+    lines = []
+    for i in range(12):
+        reply = f"needle {i} " + "hay " * (200 if i == 10 else 1) if i in (7, 8, 10, 11) else f"plain {i}"
+        lines.append(user(f"question {i}", f"2026-08-03T10:{i:02d}:00.000Z", sid))
+        lines.append(assistant([text(reply)], f"2026-08-03T10:{i:02d}:05.000Z", sid, msg_id=f"e{i}"))
+    write_transcript(claude_home / "projects" / "-home-u-proj" / f"{sid}.jsonl", lines)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
+    sync(indexed)
+    longest_note = '\n\n----\n\nt11-11 not shown to fit max_chars; read("eeeeeeee/t11-11", grep="needle")'
+    first = len(server.read("eeeeeeee/t7", grep="needle")) + len(longest_note)
+    notes = 0
+    for max_chars in range(first, first + 1200):
+        out = server.read("eeeeeeee/t7-11", grep="needle", max_chars=max_chars)
+        assert len(out) <= max_chars
+        notes += out.endswith('t10-11 not shown to fit max_chars; read("eeeeeeee/t10-11", grep="needle")')
+    assert notes
+
+
 @pytest.mark.usefixtures("indexed")
 def test_read_errors() -> None:
     with pytest.raises(ValueError, match="no session id"):

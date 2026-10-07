@@ -154,7 +154,7 @@ def read_range(
     def events(t: sqlite3.Row) -> list[sqlite3.Row]:
         return query.events_for(c, s["id"], t["idx"]) if include_tools else []
 
-    return render.view_turn_range(s, turns, events, grep, max_chars), len(turns)
+    return render.view_turn_range(s, turns, events, grep, max_chars)
 
 
 def compose_address(address: str, seq: int) -> Address:
