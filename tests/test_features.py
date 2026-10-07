@@ -580,7 +580,7 @@ def test_capped_session_grep_keeps_newest_and_prefers_conversation_over_tools(co
     assert kept_tools[0].endswith("output 20 about tests")
     assert kept_tools[-1].endswith("output 39 about tests")
     assert lines[1].endswith("claude: decision 0 about tests")
-    assert lines[-1] == "… 20 more in t0-t19; narrow the pattern or pass turns="
+    assert lines[-1] == "… 20 more tool lines in t0-t19; narrow the pattern or pass turns="
     expected = [r[4] for r in rows if r[3] == "claude" or int(r[4].split()[1]) >= 20]
     assert [line.split(": ", 1)[1] for line in lines[1:-1]] == expected
 
@@ -595,6 +595,13 @@ def test_session_grep_capped_by_max_chars_keeps_newest(conn: sqlite3.Connection)
     assert lines[-2].endswith("user: note 29 tests")
     cut = 30 - (len(lines) - 2)
     assert lines[-1] == f"… {cut} more in t0-t{cut - 1}; narrow the pattern or pass turns="
+    tools = [
+        (idx, f"uuid{idx:04d}", "2026-08-01T10:00:01.000Z", "tool:Bash#0", f"out {idx} tests") for idx in range(30)
+    ]
+    for limit in range(300, 700, 7):
+        tight = render.render_session_grep(s, tools, "tests", limit)
+        assert len(tight) <= limit
+        assert " more tool lines in t0-t" in tight.splitlines()[-1]
 
 
 def test_session_grep_marks_cut_recaps(conn: sqlite3.Connection) -> None:

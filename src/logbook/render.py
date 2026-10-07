@@ -329,7 +329,7 @@ def grep_entry(row: tuple[int, str, str, str, str]) -> str:
     return f"{where}: {clip(line, width)}"
 
 
-def grep_cut_marker(cut: list[tuple[int, str, str, str, str]]) -> str:
+def grep_cut_marker(cut: list[tuple[int, str, str, str, str]], *, longest: bool = False) -> str:
     idxs = sorted({r[0] for r in cut if r[0] >= 0})
     if not idxs:
         span = "recaps"
@@ -337,7 +337,8 @@ def grep_cut_marker(cut: list[tuple[int, str, str, str, str]]) -> str:
         span = f"t{idxs[0]}"
     else:
         span = f"t{idxs[0]}-t{idxs[-1]}"
-    return f"… {len(cut)} more in {span}; narrow the pattern or pass turns="
+    kind = " tool lines" if longest or all(r[3].startswith("tool:") for r in cut) else ""
+    return f"… {len(cut)} more{kind} in {span}; narrow the pattern or pass turns="
 
 
 def render_session_grep(
@@ -350,7 +351,7 @@ def render_session_grep(
     entries = [grep_entry(r) for r in rows]
     if len(entries) <= GREP_MAX_LINES and lines_len([head, *entries]) - 1 <= max_chars:
         return "\n".join([head, *entries])
-    reserve = len(grep_cut_marker(rows)) + 1
+    reserve = len(grep_cut_marker(rows, longest=True)) + 1
     priority = sorted(range(len(rows)), key=lambda i: (rows[i][3].startswith("tool:"), -i))
     kept: set[int] = set()
     used = len(head) + reserve
