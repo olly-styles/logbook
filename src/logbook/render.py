@@ -333,6 +333,8 @@ def grep_cut_marker(cut: list[tuple[int, str, str, str, str]], *, longest: bool 
     idxs = sorted({r[0] for r in cut if r[0] >= 0})
     if not idxs:
         span = "recaps"
+    elif longest:
+        span = f"t{idxs[-1]}-t{idxs[-1]}"
     elif idxs[0] == idxs[-1]:
         span = f"t{idxs[0]}"
     else:

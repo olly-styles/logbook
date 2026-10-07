@@ -602,6 +602,16 @@ def test_session_grep_capped_by_max_chars_keeps_newest(conn: sqlite3.Connection)
         tight = render.render_session_grep(s, tools, "tests", limit)
         assert len(tight) <= limit
         assert " more tool lines in t0-t" in tight.splitlines()[-1]
+    wide = [
+        (5, "uuid0005", "2026-08-01T10:00:01.000Z", "claude", "talk 5 tests"),
+        *[
+            (idx, f"uuid{idx:04d}", "2026-08-01T10:00:01.000Z", "tool:Bash#0", f"out {idx} tests")
+            for idx in range(100, 160)
+        ],
+    ]
+    for limit in range(2900, 3300):
+        tight = render.render_session_grep(s, wide, "tests", limit)
+        assert len(tight) <= limit
 
 
 def test_session_grep_marks_cut_recaps(conn: sqlite3.Connection) -> None:
