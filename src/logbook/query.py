@@ -292,9 +292,18 @@ def or_terms(text: str) -> list[str]:
     tokens = TOKEN.findall(text)
     if len(tokens) < OR_FALLBACK_MIN_TOKENS or any(part in FTS_OPERATORS for part in fts_parts(text)):
         return []
-    cores = [tok if is_phrase(tok) else tok.strip('"') for tok in tokens]
-    cores = [core for core in cores if token_core(core)]
-    return cores if len(cores) >= OR_FALLBACK_MIN_TOKENS else []
+    unique: dict[str, str] = {}
+    for core in map(or_term, tokens):
+        if token_core(core):
+            unique.setdefault(fts_query(core), core)
+    terms = list(unique.values())
+    return terms if len(terms) >= OR_FALLBACK_MIN_TOKENS else []
+
+
+def or_term(tok: str) -> str:
+    if not is_phrase(tok):
+        return tok.strip('"')
+    return f'"{token_core(tok)}"' + ("*" if tok.endswith("*") else "")
 
 
 def fallback_search(

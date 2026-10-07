@@ -238,6 +238,8 @@ def test_search_quoted_phrase_needs_adjacent_words(conn: sqlite3.Connection) -> 
     hits = query.search(conn, '"timer button"', query.Filters(), 10, "")
     assert [h.session["id"] for h in hits] == [SID_B]
     assert "[timer button]" in hits[0].snippets[0][1]
+    stemmed = query.search(conn, '"timers buttons"', query.Filters(), 10, "")
+    assert [h.session["id"] for h in stemmed] == [SID_B]
 
 
 def test_normalise_date_accepts_documented_forms_only() -> None:
@@ -378,6 +380,10 @@ def test_or_terms_skips_only_genuine_operator_queries() -> None:
     assert query.or_terms('"sessions match"') == []
     assert query.or_terms('"sessions match" zebrafish') == ['"sessions match"', "zebrafish"]
     assert query.or_terms('"" zebrafish quokka') == ["zebrafish", "quokka"]
+    assert query.or_terms('"sessions   match" zebrafish') == ['"sessions match"', "zebrafish"]
+    assert query.or_terms('"exact phr"* zebrafish') == ['"exact phr"*', "zebrafish"]
+    assert query.or_terms('"cats" cats dogs') == ['"cats"', "dogs"]
+    assert query.or_terms('cats "cats"') == []
 
 
 def test_session_start_hook_prunes_old_markers(
