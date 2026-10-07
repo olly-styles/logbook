@@ -293,9 +293,9 @@ def or_terms(text: str) -> list[str]:
     if len(tokens) < OR_FALLBACK_MIN_TOKENS or any(part in FTS_OPERATORS for part in fts_parts(text)):
         return []
     unique: dict[str, str] = {}
-    for core in map(or_term, tokens):
-        if token_core(core):
-            unique.setdefault(fts_query(core), core)
+    for term in map(or_term, tokens):
+        if key := fts_query(term):
+            unique.setdefault(key, term)
     terms = list(unique.values())
     return terms if len(terms) >= OR_FALLBACK_MIN_TOKENS else []
 

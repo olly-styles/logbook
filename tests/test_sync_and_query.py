@@ -197,6 +197,7 @@ def test_fts_query_keeps_quoted_phrases_whole() -> None:
     assert query.fts_query('"exact phr"* OR other') == '"exact phr"* OR "other"'
     assert query.fts_query('"OR" cats') == '"OR" "cats"'
     assert query.fts_query('"" "  " cats') == '"cats"'
+    assert query.fts_query('"foo"bar') == '"foo" "bar"'
 
 
 def test_fts_query_unbalanced_quote_falls_back_to_words() -> None:
