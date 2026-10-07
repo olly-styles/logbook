@@ -122,7 +122,7 @@ class Filters:
             pr_clause(self.pr) if self.pr else ("", []),
             (
                 "EXISTS (SELECT 1 FROM tool_events te WHERE te.session_id = s.id AND te.name LIKE ?)",
-                [f"%{self.tool.strip()}%"],
+                [f"%{self.tool}%"],
             )
             if self.tool
             else ("", []),
@@ -436,7 +436,7 @@ def event_at(conn: sqlite3.Connection, session_id: str, idx: int, seq: int) -> s
 def calls_matching(conn: sqlite3.Connection, session_id: str, pattern: str) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT idx, seq, name, model FROM tool_events WHERE session_id = ? AND name LIKE ? ORDER BY idx, seq",
-        (session_id, f"%{pattern.strip()}%"),
+        (session_id, f"%{pattern}%"),
     ).fetchall()
 
 

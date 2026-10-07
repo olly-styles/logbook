@@ -76,6 +76,11 @@ def test_tool_filter() -> None:
     assert "aaaaaaaa" in with_text
     assert "    calls: t0#1 Edit" in with_text
     assert "aaaaaaaa" not in server.search("pyright", tool="Write")
+    assert "No indexed sessions" in server.search(tool="   ")
+    fallback = server.search("pyright zebrafish", tool="Bash")
+    assert "match some of the words" in fallback
+    assert "    calls: t1#0 Bash" in fallback
+    assert "    calls: t1#0 Bash" in server.search(file="pyproject", tool="Bash")
 
 
 def test_read_levels(indexed: sqlite3.Connection) -> None:

@@ -45,7 +45,7 @@ def listing_window(since: str, pr: str, file: str, tool: str) -> str:
 def run_listing(c: sqlite3.Connection, f: query.Filters, limit: int) -> tuple[str, int]:
     if f.file:
         rows = query.sessions_touching(c, f.file, f, limit)
-        return render.render_files(rows, f.file, c), len(rows)
+        return render.render_files(rows, f.file, c, f.tool), len(rows)
     rows = query.recent(c, f, limit)
     return render.render_recent(rows, c, f.tool), len(rows)
 
@@ -59,7 +59,7 @@ def run_search(
         return render.render_hits(hits, query_text, c, f, show_tools=include_tools), len(hits)
     used["or_fallback"] = " OR ".join(terms)
     weak = query.fallback_search(c, terms, f, query.FALLBACK_LIMIT, cwd_hint())
-    return render.render_fallback(weak, query_text, terms, c), len(weak)
+    return render.render_fallback(weak, query_text, terms, c, f.tool), len(weak)
 
 
 @mcp.tool()
@@ -104,6 +104,7 @@ def search(
     Next: read("<session8>") for the index of turns, then read("<session8>", grep=...), read("<session8>/t<idx>"),
     read("<session8>/t<idx>#<seq>"), each step costing more. Never quote search output; snippets are FTS excerpts.
     """
+    tool = tool.strip()
     used = qlog.used(
         project=project,
         since=since,
