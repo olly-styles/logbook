@@ -79,7 +79,8 @@ def search(
     """Find past sessions by full text, or list them when query_text is empty.
 
     Search covers prompts, replies, titles, recaps and tool inputs/outputs. Words are ANDed within one turn, recap or
-    tool result; * is a prefix (pyrig*); upper-case OR, AND, NOT are operators. A hit is "<session8> <date> <cwd>
+    tool result; "double quotes" match an exact phrase (words adjacent, stems still match); * is a prefix (pyrig*);
+    upper-case OR, AND, NOT are operators. A hit is "<session8> <date> <cwd>
     (<branch>) PR <repo#n> <N>t <model> <title>" with "tool: t<idx>#<seq> <Tool> [<model>]" refs when tool output
     matched (Agent refs carry the subagent's model), then the latest recap or last reply, at most one earlier recap
     and up to two snippets tagged t<idx>; PR urls only with pr=, matching paths only with file=. Sessions matching

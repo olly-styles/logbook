@@ -186,8 +186,21 @@ def test_search_prefers_current_directory(conn: sqlite3.Connection) -> None:
 
 
 def test_fts_query_sanitises_punctuation() -> None:
-    assert query.fts_query('feat/selfhost-3stage "quoted" pyrig*') == '"feat/selfhost-3stage" """quoted""" "pyrig"*'
+    assert query.fts_query('feat/selfhost-3stage "quoted" pyrig*') == '"feat/selfhost-3stage" "quoted" "pyrig"*'
+    assert query.fts_query('say"hi"') == '"say""hi"""'
     assert query.fts_query("a OR b") == '"a" OR "b"'
+
+
+def test_fts_query_keeps_quoted_phrases_whole() -> None:
+    assert query.fts_query('"sessions match"') == '"sessions match"'
+    assert query.fts_query('"sessions   match" logbook') == '"sessions match" "logbook"'
+    assert query.fts_query('"exact phr"* OR other') == '"exact phr"* OR "other"'
+    assert query.fts_query('"OR" cats') == '"OR" "cats"'
+    assert query.fts_query('"" "  " cats') == '"cats"'
+
+
+def test_fts_query_unbalanced_quote_falls_back_to_words() -> None:
+    assert query.fts_query('"sessions match') == '"""sessions" "match"'
 
 
 def test_fts_query_operators_only_upper_case_between_terms() -> None:
@@ -201,7 +214,9 @@ def test_fts_query_operators_only_upper_case_between_terms() -> None:
     assert query.fts_query("a OR *") == '"a" "OR"'
 
 
-@pytest.mark.parametrize("text", ["apples OR", "NOT foo", "or", "foo AND", "OR OR", "a OR NOT b", "* OR"])
+@pytest.mark.parametrize(
+    "text", ["apples OR", "NOT foo", "or", "foo AND", "OR OR", "a OR NOT b", "* OR", '"open', '"" OR', 'a" b"c"']
+)
 def test_search_accepts_operator_words_anywhere(conn: sqlite3.Connection, text: str) -> None:
     sync(conn)
     query.search(conn, text, query.Filters(), 10, "")
@@ -214,6 +229,15 @@ def test_search_treats_lower_case_operator_words_as_words(conn: sqlite3.Connecti
     assert query.search(conn, "timer or pyright", query.Filters(), 10, "") == []
     ids = {h.session["id"] for h in query.search(conn, "timer OR pyright", query.Filters(), 10, "")}
     assert ids == {SID_A, SID_B}
+
+
+def test_search_quoted_phrase_needs_adjacent_words(conn: sqlite3.Connection) -> None:
+    sync(conn)
+    assert [h.session["id"] for h in query.search(conn, "timer resume", query.Filters(), 10, "")] == [SID_B]
+    assert query.search(conn, '"timer resume"', query.Filters(), 10, "") == []
+    hits = query.search(conn, '"timer button"', query.Filters(), 10, "")
+    assert [h.session["id"] for h in hits] == [SID_B]
+    assert "[timer button]" in hits[0].snippets[0][1]
 
 
 def test_normalise_date_accepts_documented_forms_only() -> None:
@@ -351,6 +375,9 @@ def test_or_terms_skips_only_genuine_operator_queries() -> None:
     assert query.or_terms("cats or dogs") == ["cats", "or", "dogs"]
     assert query.or_terms("apples OR") == ["apples", "OR"]
     assert query.or_terms("cats OR dogs") == []
+    assert query.or_terms('"sessions match"') == []
+    assert query.or_terms('"sessions match" zebrafish') == ['"sessions match"', "zebrafish"]
+    assert query.or_terms('"" zebrafish quokka') == ["zebrafish", "quokka"]
 
 
 def test_session_start_hook_prunes_old_markers(

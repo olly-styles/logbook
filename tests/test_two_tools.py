@@ -213,6 +213,9 @@ def test_search_falls_back_to_or_and_says_so() -> None:
     assert miss.startswith("No sessions match 'quokka wombat' or two or more of its words.")
     assert server.search("leetcode wombat").startswith("No sessions match 'leetcode wombat' or two or more")
     assert server.search("pyright OR wombat").startswith("1 sessions match")
+    phrase = server.search('"mypy to pyright" zebrafish quokka').splitlines()
+    assert phrase[1].endswith('matched: "mypy to pyright", zebrafish')
+    assert server.search('"pyright mypy" zebrafish quokka').startswith("No sessions match")
 
 
 @pytest.mark.usefixtures("indexed")
