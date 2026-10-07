@@ -555,9 +555,70 @@ def test_session_grep_caps_lines_and_prefers_turns_over_recaps(conn: sqlite3.Con
     lines = out.splitlines()
     assert lines[0].startswith("session aaaaaaaa: 70 line(s) match /tests/")
     assert "recap " not in out
-    assert lines[1].endswith("claude: line 0 about tests")
-    assert lines[-2].endswith("claude: line 59 about tests")
-    assert lines[-1] == "… 10 more; narrow the pattern or pass turns="
+    assert lines[1].endswith("claude: line 10 about tests")
+    assert lines[-2].endswith("claude: line 69 about tests")
+    assert lines[-1] == "… 10 more in t0; narrow the pattern or pass turns="
     assert len(lines) == 62
     only_recap = render.render_session_grep(s, [recap], "tests", 100000)
     assert "recap 2026-08-01 09:00: recap mentions tests" in only_recap
+
+
+def test_capped_session_grep_keeps_newest_and_prefers_conversation_over_tools(conn: sqlite3.Connection) -> None:
+    sync(conn)
+    s = query.resolve_session(conn, SID_A)
+    ts = "2026-08-01T10:00:01.000Z"
+    rows = []
+    for idx in range(40):
+        rows.append((idx, f"uuid{idx:04d}", ts, "claude", f"decision {idx} about tests"))
+        rows.append((idx, f"uuid{idx:04d}", ts, "tool:Bash#0", f"output {idx} about tests"))
+    out = render.render_session_grep(s, rows, "tests", 100000)
+    lines = out.splitlines()
+    assert len(lines) == 62
+    assert sum("claude: decision" in line for line in lines) == 40
+    kept_tools = [line for line in lines if "tool:Bash#0" in line]
+    assert len(kept_tools) == 20
+    assert kept_tools[0].endswith("output 20 about tests")
+    assert kept_tools[-1].endswith("output 39 about tests")
+    assert lines[1].endswith("claude: decision 0 about tests")
+    assert lines[-1] == "… 20 more tool lines in t0-t19; narrow the pattern or pass turns="
+    expected = [r[4] for r in rows if r[3] == "claude" or int(r[4].split()[1]) >= 20]
+    assert [line.split(": ", 1)[1] for line in lines[1:-1]] == expected
+
+
+def test_session_grep_capped_by_max_chars_keeps_newest(conn: sqlite3.Connection) -> None:
+    sync(conn)
+    s = query.resolve_session(conn, SID_A)
+    rows = [(idx, f"uuid{idx:04d}", "2026-08-01T10:00:01.000Z", "user", f"note {idx} tests") for idx in range(30)]
+    out = render.render_session_grep(s, rows, "tests", 600)
+    assert len(out) <= 600
+    lines = out.splitlines()
+    assert lines[-2].endswith("user: note 29 tests")
+    cut = 30 - (len(lines) - 2)
+    assert lines[-1] == f"… {cut} more in t0-t{cut - 1}; narrow the pattern or pass turns="
+    tools = [
+        (idx, f"uuid{idx:04d}", "2026-08-01T10:00:01.000Z", "tool:Bash#0", f"out {idx} tests") for idx in range(30)
+    ]
+    for limit in range(300, 700, 7):
+        tight = render.render_session_grep(s, tools, "tests", limit)
+        assert len(tight) <= limit
+        assert " more tool lines in t0-t" in tight.splitlines()[-1]
+    wide = [
+        (5, "uuid0005", "2026-08-01T10:00:01.000Z", "claude", "talk 5 tests"),
+        *[
+            (idx, f"uuid{idx:04d}", "2026-08-01T10:00:01.000Z", "tool:Bash#0", f"out {idx} tests")
+            for idx in range(100, 160)
+        ],
+    ]
+    for limit in range(2900, 3300):
+        tight = render.render_session_grep(s, wide, "tests", limit)
+        assert len(tight) <= limit
+
+
+def test_session_grep_marks_cut_recaps(conn: sqlite3.Connection) -> None:
+    sync(conn)
+    s = query.resolve_session(conn, SID_A)
+    recaps = [(-1, "", f"2026-08-01T09:{m:02d}:00.000Z", "recap", f"recap {m} tests") for m in range(65)]
+    out = render.render_session_grep(s, recaps, "tests", 100000)
+    lines = out.splitlines()
+    assert lines[1].endswith("recap 5 tests")
+    assert lines[-1] == "… 5 more in recaps; narrow the pattern or pass turns="

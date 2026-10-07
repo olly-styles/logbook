@@ -189,7 +189,9 @@ def read(
     max_chars. turns="last:5", "first:3", "2-6" or "1,4,9" returns those turns' user message and final reply,
     clipped; never quote from it. grep=<regex> lists every matching line across prompts, replies, tool results and,
     for a tool call whose result has no match, its input, as "t<idx> <uuid8> <date> <role>: <line>" (roles user,
-    claude, tool:<Name>#<seq>, tool:<Name>#<seq> input; recaps only when no turn matches; at most 60 lines).
+    claude, tool:<Name>#<seq>, tool:<Name>#<seq> input; recaps only when no turn matches). Past 60 lines or max_chars
+    it keeps user and claude lines before tool lines, newest first, and ends "… <n> more [tool lines] in t<a>[-t<b>]"
+    or "… <n> more in recaps".
 
     Turn: full user message and final reply, tools and files used, and a "cite: [<session8> <uuid8> t<idx> <date>
     <model>]" line; append the role when quoting. grep=<regex> returns matching lines with two lines of context;

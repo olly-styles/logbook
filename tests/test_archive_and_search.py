@@ -482,7 +482,7 @@ def test_grep_session_lists_roles_and_addresses(conn: sqlite3.Connection) -> Non
     assert "no lines match" in render.render_session_grep(s, [], "zzz", 6000)
     capped = render.render_session_grep(s, rows, "tests|passed", 160)
     assert len(capped) <= 160
-    assert "more; narrow the pattern" in capped
+    assert capped.endswith("… 3 more in t1; narrow the pattern or pass turns=")
 
 
 def test_instructions_load_from_package_data() -> None:
