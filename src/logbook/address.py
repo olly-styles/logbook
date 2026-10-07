@@ -26,6 +26,8 @@ def parse_address(text: str) -> Address:
     seq = int(m.group(4)) if m.group(4) else -1
     if m.group(3) is None:
         return Address(m.group(1), turn, seq)
+    if turn.isdigit():
+        raise ValueError(f"turn range in {text!r} needs a t prefix: write {m.group(1)}/t{turn}-{m.group(3)}")
     start = TURN_IDX.match(turn)
     if start is None or not turn.startswith("t"):
         raise ValueError(f"turn range in {text!r} needs turn indexes, as in 27c3625f/t16-20")

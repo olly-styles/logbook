@@ -150,8 +150,11 @@ def read_range(
 ) -> tuple[str, int]:
     s = query.resolve_session(c, addr.session)
     turns = query.turns_between(c, s["id"], int(addr.turn.lstrip("t")), addr.turn_end)
-    pairs = [(t, query.events_for(c, s["id"], t["idx"]) if include_tools else []) for t in turns]
-    return render.view_turn_range(s, pairs, grep, max_chars), len(turns)
+
+    def events(t: sqlite3.Row) -> list[sqlite3.Row]:
+        return query.events_for(c, s["id"], t["idx"]) if include_tools else []
+
+    return render.view_turn_range(s, turns, events, grep, max_chars), len(turns)
 
 
 def compose_address(address: str, seq: int) -> Address:
@@ -169,6 +172,8 @@ def run_read(
     c: sqlite3.Connection, addr: Address, turns: str, grep: str, max_chars: int, *, include_tools: bool
 ) -> tuple[str, int]:
     if addr.turn_end >= 0:
+        if turns.strip():
+            raise ValueError(f"turns={turns!r} does not apply to the turn range {addr.turn}-{addr.turn_end}; drop one")
         return read_range(c, addr, grep, max_chars, include_tools=include_tools)
     s, t = resolve(c, addr)
     if t is None:

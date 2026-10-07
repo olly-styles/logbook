@@ -35,6 +35,8 @@ def test_parse_address_forms() -> None:
         parse_address("27c3625f/t1-3#2")
     with pytest.raises(ValueError, match="needs turn indexes"):
         parse_address("27c3625f/70d158d1-3")
+    with pytest.raises(ValueError, match="write 27c3625f/t16-20"):
+        parse_address("27c3625f/16-20")
     for bad in (
         "t16 claude",
         "[27c3625f 70d158d1 t16 2026-08-21 claude]",
@@ -120,10 +122,33 @@ def test_read_turn_range() -> None:
     tiny = server.read(f"{SID_A[:8]}/t0-1", max_chars=200)
     assert tiny.startswith("session aaaaaaaa turn 0 ")
     assert tiny.endswith('read("aaaaaaaa/t1")')
+    grep_cut = server.read(f"{SID_A[:8]}/t0-1", grep="t", max_chars=first_only - 40)
+    assert grep_cut.endswith('t1 not shown to fit max_chars; read("aaaaaaaa/t1", grep="t")')
+    with pytest.raises(ValueError, match="does not apply to the turn range"):
+        server.read(f"{SID_A[:8]}/t0-1", turns="last:1")
     with pytest.raises(query.NotFoundError, match="no turns in t5-9"):
         server.read(f"{SID_A[:8]}/t5-9")
     with pytest.raises(ValueError, match="needs a single turn"):
         server.read(f"{SID_A[:8]}/t0-1", seq=0)
+
+
+def test_read_turn_range_cut_at_middle_turn(
+    indexed: sqlite3.Connection, claude_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sid = "dddddddd-0000-0000-0000-000000000004"
+    lines = []
+    for i in range(5):
+        reply = "long answer " * 300 if i == 2 else f"short answer {i}"
+        lines.append(user(f"question {i}", f"2026-08-02T10:0{i}:00.000Z", sid))
+        lines.append(assistant([text(reply)], f"2026-08-02T10:0{i}:05.000Z", sid, msg_id=f"d{i}"))
+    write_transcript(claude_home / "projects" / "-home-u-proj" / f"{sid}.jsonl", lines)
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "")
+    sync(indexed)
+    out = server.read("dddddddd/t0-4", max_chars=2000)
+    assert "short answer 1" in out
+    assert "long answer" not in out
+    assert out.endswith('t2-4 not shown to fit max_chars; read("dddddddd/t2-4")')
+    assert len(out) <= 2000
 
 
 @pytest.mark.usefixtures("indexed")

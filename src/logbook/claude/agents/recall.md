@@ -20,6 +20,7 @@ Method:
 2. Locate turns with `read("<session8>", grep="<distinctive words>")`, which lists every matching line as
    `t<idx> <uuid8> <date> <role>: <line>`. A plain `read("<session8>")` is a one-line-per-turn index; use
    `grep=` to find lines and `turns=` (for example `turns="last:5"`) for a few turns' text.
+   `read("<session8>/t65-71", grep=...)` reads consecutive turns in one call instead of one read per turn.
 3. Lift quotes only from turn-level or tool-level reads: `read("<session8>/<uuid8>", grep=...)` or
    `read("<session8>/<uuid8>#<seq>", grep=...)`. Always grep a turn before reading it with `include_tools=True`:
    a turn's tool output runs to 10-16k chars where the grep gives about 2k, and the grep's `tool #<seq>` labels
