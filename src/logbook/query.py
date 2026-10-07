@@ -348,6 +348,15 @@ def turn_at(conn: sqlite3.Connection, session_id: str, idx: int) -> sqlite3.Row:
     return row
 
 
+def turns_between(conn: sqlite3.Connection, session_id: str, first: int, last: int) -> list[sqlite3.Row]:
+    rows = conn.execute(
+        "SELECT * FROM turns WHERE session_id = ? AND idx BETWEEN ? AND ? ORDER BY idx", (session_id, first, last)
+    ).fetchall()
+    if not rows:
+        raise NotFoundError(f"session {session_id[:8]} has no turns in t{first}-{last}")
+    return rows
+
+
 def turn_by_uuid(conn: sqlite3.Connection, session_id: str, uuid_prefix: str) -> sqlite3.Row:
     key = uuid_prefix.strip()
     if not key:

@@ -25,6 +25,16 @@ def test_parse_address_forms() -> None:
     a = parse_address("27c3625f-b1ec-449d-8e91-09e7b7390575/t4")
     assert a.session == "27c3625f-b1ec-449d-8e91-09e7b7390575"
     assert a.turn == "t4"
+    a = parse_address("27c3625f/t65-71")
+    assert (a.turn, a.turn_end, a.seq) == ("t65", 71, -1)
+    assert parse_address("27c3625f/T65-t71").turn_end == 71
+    assert parse_address("27c3625f/t16").turn_end == -1
+    with pytest.raises(ValueError, match="runs backwards"):
+        parse_address("27c3625f/t9-3")
+    with pytest.raises(ValueError, match="needs a single turn"):
+        parse_address("27c3625f/t1-3#2")
+    with pytest.raises(ValueError, match="needs turn indexes"):
+        parse_address("27c3625f/70d158d1-3")
     for bad in (
         "t16 claude",
         "[27c3625f 70d158d1 t16 2026-08-21 claude]",
@@ -87,6 +97,33 @@ def test_read_levels(indexed: sqlite3.Connection) -> None:
     session_grep = server.read(SID_A[:8], grep="pyright")
     assert "t0 " in session_grep
     assert "user:" in session_grep
+
+
+@pytest.mark.usefixtures("indexed")
+def test_read_turn_range() -> None:
+    both = server.read(f"{SID_A[:8]}/t0-1")
+    assert both == server.read(f"{SID_A[:8]}/t0") + "\n\n----\n\n" + server.read(f"{SID_A[:8]}/t1")
+    assert server.read(f"{SID_A[:8]}/t0-t1") == both
+    assert server.read(f"{SID_A[:8]}/t1-9") == server.read(f"{SID_A[:8]}/t1")
+    with_tools = server.read(f"{SID_A[:8]}/t0-1", include_tools=True)
+    assert "tool calls:" in with_tools
+    assert with_tools.count("cite: [aaaaaaaa ") >= 2
+    grepped = server.read(f"{SID_A[:8]}/t0-1", grep="12 tests")
+    assert "turn 1 " in grepped
+    assert "turn 0 " not in grepped
+    assert "no lines match /zebra-nope/" in server.read(f"{SID_A[:8]}/t0-1", grep="zebra-nope")
+    first_only = len(server.read(f"{SID_A[:8]}/t0")) + 80
+    cut = server.read(f"{SID_A[:8]}/t0-1", max_chars=first_only)
+    assert "turn 0 " in cut
+    assert cut.endswith('t1 not shown to fit max_chars; read("aaaaaaaa/t1")')
+    assert len(cut) <= first_only
+    tiny = server.read(f"{SID_A[:8]}/t0-1", max_chars=200)
+    assert tiny.startswith("session aaaaaaaa turn 0 ")
+    assert tiny.endswith('read("aaaaaaaa/t1")')
+    with pytest.raises(query.NotFoundError, match="no turns in t5-9"):
+        server.read(f"{SID_A[:8]}/t5-9")
+    with pytest.raises(ValueError, match="needs a single turn"):
+        server.read(f"{SID_A[:8]}/t0-1", seq=0)
 
 
 @pytest.mark.usefixtures("indexed")

@@ -145,18 +145,31 @@ def resolve(c: sqlite3.Connection, addr: Address) -> tuple[sqlite3.Row, sqlite3.
     return s, query.turn_by_ref(c, s["id"], addr.turn)
 
 
+def read_range(
+    c: sqlite3.Connection, addr: Address, grep: str, max_chars: int, *, include_tools: bool
+) -> tuple[str, int]:
+    s = query.resolve_session(c, addr.session)
+    turns = query.turns_between(c, s["id"], int(addr.turn.lstrip("t")), addr.turn_end)
+    pairs = [(t, query.events_for(c, s["id"], t["idx"]) if include_tools else []) for t in turns]
+    return render.view_turn_range(s, pairs, grep, max_chars), len(turns)
+
+
 def compose_address(address: str, seq: int) -> Address:
     addr = parse_address(address)
     if seq >= 0:
         addr.seq = seq
     if addr.seq >= 0 and not addr.turn:
         raise ValueError(f"seq={addr.seq} needs a turn: use {addr.session}/t<idx>#{addr.seq}")
+    if addr.seq >= 0 and addr.turn_end >= 0:
+        raise ValueError(f"seq={addr.seq} needs a single turn, not a range: use {addr.session}/{addr.turn}#{addr.seq}")
     return addr
 
 
 def run_read(
     c: sqlite3.Connection, addr: Address, turns: str, grep: str, max_chars: int, *, include_tools: bool
 ) -> tuple[str, int]:
+    if addr.turn_end >= 0:
+        return read_range(c, addr, grep, max_chars, include_tools=include_tools)
     s, t = resolve(c, addr)
     if t is None:
         return render.view_session(c, s, turns, grep, max_chars), 1
@@ -180,8 +193,8 @@ def read(
     """Read one session, one turn or one tool result.
 
     address: "27c3625f" (session id or 8-char prefix); "27c3625f/70d158d1" or "27c3625f/t16" (turn, by stable
-    8-char uuid anchor or by index); "27c3625f/70d158d1#3" (tool call 3 of that turn; seq=3 on a turn address is
-    the same). max_chars must be at least 1.
+    8-char uuid anchor or by index); "27c3625f/t16-20" (turns 16 to 20 in one call); "27c3625f/70d158d1#3" (tool
+    call 3 of that turn; seq=3 on a turn address is the same). max_chars must be at least 1.
 
     Session: header (dates, cwd, branch, PRs, recap trail, files written, resume command), then one line per turn
     "t<idx> <uuid8> <time> [<seq range> <tool counts>] <start of user message>", middle turns collapsed to fit
@@ -193,6 +206,8 @@ def read(
     Turn: full user message and final reply, tools and files used, and a "cite: [<session8> <uuid8> t<idx> <date>
     <model>]" line; append the role when quoting. grep=<regex> returns matching lines with two lines of context;
     grep a turn before include_tools=True, which adds every tool call with its input and a clipped result.
+    A turn range gives each turn in full, in order, until max_chars, then names the turns left out; with grep= it
+    keeps only the turns that match.
 
     Tool result (#seq): the recorded output with its own cite line (an Agent result cites the subagent's model);
     capped when indexed (8000 chars, 20000 for fetch-like tools), secrets redacted, a cut result ends "[output
