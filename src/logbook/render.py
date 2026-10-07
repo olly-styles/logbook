@@ -13,6 +13,7 @@ WS = re.compile(r"\s+")
 MODEL_DATE_SUFFIX = re.compile(r"-\d{8}$")
 TIME_TS_MIN_LEN = 16
 MAX_MATCHED_FILES = 6
+MAX_MATCHED_CALLS = 6
 MAX_PRS_INLINE = 3
 MAX_PRS_LISTED = 8
 TURN_USER_CLIP = 300
@@ -175,6 +176,13 @@ def matched_files(paths: list[str]) -> str:
     return shown + (f" +{extra}" if extra > 0 else "")
 
 
+def matched_calls(conn: sqlite3.Connection, session_id: str, pattern: str) -> str:
+    calls = query.calls_matching(conn, session_id, pattern)
+    shown = ", ".join(f"t{e['idx']}#{e['seq']} {event_label(e)}" for e in calls[:MAX_MATCHED_CALLS])
+    extra = len(calls) - MAX_MATCHED_CALLS
+    return "    calls: " + shown + (f" +{extra}" if extra > 0 else "")
+
+
 def render_hit(h: Hit, conn: sqlite3.Connection, f: Filters, *, show_tools: bool) -> list[str]:
     s = h.session
     prs = query.prs_for(conn, s["id"])
@@ -192,6 +200,8 @@ def render_hit(h: Hit, conn: sqlite3.Connection, f: Filters, *, show_tools: bool
     if f.file:
         rows = query.files_for(conn, s["id"])
         lines.append("    files: " + matched_files([r["path"] for r in rows if f.file.lower() in r["path"].lower()]))
+    if f.tool:
+        lines.append(matched_calls(conn, s["id"], f.tool))
     lines.extend(f"    t{idx}: {clip(snip, 200)}" for idx, snip in h.snippets)
     if h.tool_snippets and show_tools:
         for e, snip in h.tool_snippets:
@@ -229,7 +239,7 @@ def render_hits(hits: list[Hit], query_text: str, conn: sqlite3.Connection, f: F
     return "\n".join(lines)
 
 
-def render_fallback(hits: list[Hit], query_text: str, terms: list[str], conn: sqlite3.Connection) -> str:
+def render_fallback(hits: list[Hit], query_text: str, terms: list[str], conn: sqlite3.Connection, f: Filters) -> str:
     if not hits:
         return f"No sessions match {query_text!r} or two or more of its words. {RETRY_HINT}"
     lines = [
@@ -239,10 +249,12 @@ def render_fallback(hits: list[Hit], query_text: str, terms: list[str], conn: sq
     for h in hits:
         matched = ", ".join(sorted(h.matched_terms, key=terms.index))
         lines.append(f"{session_line(h.session, query.prs_for(conn, h.session['id']))}  matched: {matched}")
+        if f.tool:
+            lines.append(matched_calls(conn, h.session["id"], f.tool))
     return "\n".join(lines)
 
 
-def render_recent(rows: list[sqlite3.Row], conn: sqlite3.Connection) -> str:
+def render_recent(rows: list[sqlite3.Row], conn: sqlite3.Connection, f: Filters) -> str:
     if not rows:
         return "No indexed sessions match; widen since= or drop a filter."
     lines = [f"{len(rows)} most recent sessions matching the filters:"]
@@ -251,6 +263,8 @@ def render_recent(rows: list[sqlite3.Row], conn: sqlite3.Connection) -> str:
         outcome = outcome_line(s, LISTING_RECAP_CLIP)
         if outcome:
             lines.append(outcome)
+        if f.tool:
+            lines.append(matched_calls(conn, s["id"], f.tool))
     return "\n".join(lines)
 
 
@@ -536,13 +550,15 @@ def view_event(s: sqlite3.Row, t: sqlite3.Row, e: sqlite3.Row, grep: str, max_ch
     return render_event(s, t, e, max_chars)
 
 
-def render_files(rows: list[sqlite3.Row], pattern: str, conn: sqlite3.Connection) -> str:
+def render_files(rows: list[sqlite3.Row], conn: sqlite3.Connection, f: Filters) -> str:
     if not rows:
-        return f"No indexed session touched a file matching {pattern!r}."
-    lines = [f"{len(rows)} sessions touched files matching {pattern!r} (newest first):"]
+        return f"No indexed session touched a file matching {f.file!r}."
+    lines = [f"{len(rows)} sessions touched files matching {f.file!r} (newest first):"]
     for s in rows:
         lines.append(session_line(s, query.prs_for(conn, s["id"])))
         lines.append("    " + matched_files(s["matched"].split("\n")))
+        if f.tool:
+            lines.append(matched_calls(conn, s["id"], f.tool))
     return "\n".join(lines)
 
 

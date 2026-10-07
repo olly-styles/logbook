@@ -293,7 +293,7 @@ def test_search_matches_earlier_recaps_and_clips_latest(conn: sqlite3.Connection
     assert render.clip(latest, render.RECAP_CLIP) in "\n".join(
         render.session_header(row, [], [], query.recaps_for(conn, SID_R))
     )
-    listing = render.render_recent(query.recent(conn, query.Filters(), 5), conn)
+    listing = render.render_recent(query.recent(conn, query.Filters(), 5), conn, query.Filters())
     assert f"    recap: {render.clip(latest, render.LISTING_RECAP_CLIP)}" in listing
 
 

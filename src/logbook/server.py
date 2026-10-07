@@ -36,8 +36,8 @@ def at_least_one(name: str, value: int) -> int:
     return value
 
 
-def listing_window(since: str, pr: str, file: str) -> str:
-    if since or pr or file:
+def listing_window(since: str, pr: str, file: str, tool: str) -> str:
+    if since or pr or file or tool:
         return since
     return DEFAULT_LISTING_WINDOW
 
@@ -45,9 +45,9 @@ def listing_window(since: str, pr: str, file: str) -> str:
 def run_listing(c: sqlite3.Connection, f: query.Filters, limit: int) -> tuple[str, int]:
     if f.file:
         rows = query.sessions_touching(c, f.file, f, limit)
-        return render.render_files(rows, f.file, c), len(rows)
+        return render.render_files(rows, c, f), len(rows)
     rows = query.recent(c, f, limit)
-    return render.render_recent(rows, c), len(rows)
+    return render.render_recent(rows, c, f), len(rows)
 
 
 def run_search(
@@ -59,7 +59,7 @@ def run_search(
         return render.render_hits(hits, query_text, c, f, show_tools=include_tools), len(hits)
     used["or_fallback"] = " OR ".join(terms)
     weak = query.fallback_search(c, terms, f, query.FALLBACK_LIMIT, cwd_hint())
-    return render.render_fallback(weak, query_text, terms, c), len(weak)
+    return render.render_fallback(weak, query_text, terms, c, f), len(weak)
 
 
 @mcp.tool()
@@ -70,6 +70,7 @@ def search(
     until: str = "",
     file: str = "",
     pr: str = "",
+    tool: str = "",
     session_id: str = "",
     limit: int = SEARCH_DEFAULT_LIMIT,
     *,
@@ -83,30 +84,35 @@ def search(
     upper-case OR, AND, NOT are operators. A hit is "<session8> <date> <cwd>
     (<branch>) PR <repo#n> <N>t <model> <title>" with "tool: t<idx>#<seq> <Tool> [<model>]" refs when tool output
     matched (Agent refs carry the subagent's model), then the latest recap or last reply, at most one earlier recap
-    and up to two snippets tagged t<idx>; PR urls only with pr=, matching paths only with file=. Sessions matching
-    only in tool output follow every text match, one line each, at most three after a text match; when nothing
-    matched in text, up to limit; include_tools=True shows their snippets. When nothing holds all the words, up to
-    five sessions matching two or more of them are listed one line each. Ranking is BM25 plus a boost for the
-    current directory; among equal hits read the newest first unless the question names a time or asks where
-    something was first done. The current session is excluded; headless sessions (SDK runs, /tmp/claude-* workdirs) need
-    include_headless=True.
+    and up to two snippets tagged t<idx>; PR urls only with pr=, matching paths only with file=, and with tool= a
+    "calls: t<idx>#<seq> <Tool>" line listing calls whose tool name matched (unlike "tool:" refs, which mark tool
+    output that matched the words). Sessions matching only in tool output follow every text match, one line each, at
+    most three after a text match; when nothing matched in text, up to limit; include_tools=True shows their
+    snippets. When nothing holds all the words, up to five sessions matching two or more of them are listed one line
+    each. Ranking is BM25 plus a boost for the current directory; among equal hits read the newest first unless the
+    question names a time or asks where something was first done. The current session is excluded; headless sessions
+    (SDK runs, /tmp/claude-* workdirs) need include_headless=True.
 
     Empty query_text lists sessions newest first, 8 rows unless limit=, over the last 14 days unless
-    since=, pr= or file= is given: search(project="myrepo"), search(pr="119"), search(file="auth.py").
+    since=, pr=, file= or tool= is given: search(project="myrepo"), search(pr="119"), search(file="auth.py"),
+    search(tool="WebFetch").
 
     Filters: project = substring of the cwd; since/until = YYYY-MM-DD, 7d/2w/3m or an ISO 8601 timestamp; file =
-    substring of a path read or written; pr = PR number or substring of the PR url or repo; session_id = id or
-    8-char prefix to search one session (up to 12 snippets). limit must be at least 1.
+    substring of a path read or written; pr = PR number or substring of the PR url or repo; tool = substring of a
+    called tool's name (tool="playwright" matches mcp__playwright__browser_click); session_id = id or 8-char prefix
+    to search one session (up to 12 snippets). limit must be at least 1.
 
     Next: read("<session8>") for the index of turns, then read("<session8>", grep=...), read("<session8>/t<idx>"),
     read("<session8>/t<idx>#<seq>"), each step costing more. Never quote search output; snippets are FTS excerpts.
     """
+    tool = tool.strip()
     used = qlog.used(
         project=project,
         since=since,
         until=until,
         file=file,
         pr=pr,
+        tool=tool,
         session_id=session_id,
         include_tools=include_tools,
         include_headless=include_headless,
@@ -118,10 +124,11 @@ def search(
             if not query_text.strip():
                 f = filters(
                     project=project,
-                    since=listing_window(since, pr, file),
+                    since=listing_window(since, pr, file, tool),
                     until=until,
                     file=file,
                     pr=pr,
+                    tool=tool,
                     include_headless=include_headless,
                 )
                 return run_listing(c, f, at_least_one("limit", limit))
@@ -131,6 +138,7 @@ def search(
                 until=until,
                 file=file,
                 pr=pr,
+                tool=tool,
                 session_id=session_id,
                 include_headless=include_headless,
             )
